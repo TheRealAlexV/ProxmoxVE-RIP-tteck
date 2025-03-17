@@ -207,10 +207,30 @@ advanced_settings() {
   if CT_NAME=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set Hostname" 8 58 $NSAPP --title "HOSTNAME" 3>&1 1>&2 2>&3); then
     if [ -z "$CT_NAME" ]; then
       HN="$NSAPP"
+      # Prompt for domain
+      DOMAIN1=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set Domain Name (e.g., example.com)" 8 58 --title "DOMAIN NAME" 3>&1 1>&2 2>&3)
+      if [ $? -ne 0 ]; then
+        exit_script
+      fi
+      echo -e "${HOSTNAME}${BOLD}${DGN}Hostname: ${BGN}$HN${CL}"
+      echo -e "${HOSTNAME}${BOLD}${DGN}Domain: ${BGN}${DOMAIN1:-none}${CL}"
     else
-      HN=$(echo ${CT_NAME,,} | tr -d ' ')
+      # Convert to lowercase and remove spaces
+      CT_NAME=$(echo ${CT_NAME,,} | tr -d ' ')
+      
+      # Check if hostname contains a domain
+      if [[ "$CT_NAME" == *"."* ]]; then
+        # Extract hostname and domain
+        HN=$(echo "$CT_NAME" | cut -d '.' -f 1)
+        DOMAIN1=$(echo "$CT_NAME" | cut -d '.' -f 2-)
+      else
+        HN="$CT_NAME"
+        # Prompt for domain
+        DOMAIN1=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set Domain Name (e.g., example.com)" 8 58 --title "DOMAIN NAME" 3>&1 1>&2 2>&3)
+      fi
+      echo -e "${HOSTNAME}${BOLD}${DGN}Hostname: ${BGN}$HN${CL}"
+      echo -e "${HOSTNAME}${BOLD}${DGN}Domain: ${BGN}${DOMAIN1:-none}${CL}"
     fi
-    echo -e "${HOSTNAME}${BOLD}${DGN}Hostname: ${BGN}$HN${CL}"
   else
     exit_script
   fi

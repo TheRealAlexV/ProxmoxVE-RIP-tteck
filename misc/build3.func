@@ -311,15 +311,21 @@ register_infrastructure() {
     return
   fi
   
-  # Register in Netbox
-  msg_info "Adding host to Netbox"
-  NETBOX_DATA=$(cat <<EOF
+  # Prepare Netbox data
+  if [ -n "$DOMAIN1" ]; then
+    NETBOX_DATA=$(cat <<EOF
 {
   "address": "$NET",
   "dns_name": "$HN.$DOMAIN1"
 }
 EOF
 )
+  else
+    NETBOX_DATA="{\"address\": \"$NET\"}"
+  fi
+  
+  # Register in Netbox
+  msg_info "Adding host to Netbox"
   
   curl -s -X POST \
     -H "Authorization: Token $NBTOKEN" \
@@ -382,6 +388,7 @@ build_container() {
   export VERBOSE="$VERB"
   export SSH_ROOT="${SSH}"
   export GITHUB_USERNAME
+  export DOMAIN1
   export SSH_KEY_SOURCE
   export SSH_AUTHORIZED_KEY
   export CTID="$CT_ID"
