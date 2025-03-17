@@ -303,6 +303,48 @@ register_infrastructure() {
     return
   fi
   
+  # Get available tenants from Netbox
+  msg_info "Fetching available tenants from Netbox"
+  TENANTS_JSON=$(curl -s -X GET \
+    -H "Authorization: Token $NBTOKEN" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json; indent=4" \
+    "$NBADDR/api/tenancy/tenants/")
+  
+  # Extract tenant information for display
+  TENANTS_COUNT=$(echo "$TENANTS_JSON" | jq '.count')
+  
+  if [ "$TENANTS_COUNT" -eq 0 ]; then
+    msg_info "No tenants found in Netbox. Proceeding without tenant assignment."
+    TENANT_ID=""
+  else
+    # Create menu options for tenants
+    TENANT_OPTIONS=()
+    TENANT_OPTIONS+=("0" "No Tenant (Default)")
+    
+    for ((i=0; i<$TENANTS_COUNT; i++)); do
+      TENANT_ID=$(echo "$TENANTS_JSON" | jq -r ".results[$i].id")
+      TENANT_NAME=$(echo "$TENANTS_JSON" | jq -r ".results[$i].name")
+      TENANT_DESCRIPTION=$(echo "$TENANTS_JSON" | jq -r ".results[$i].description // \"\"")
+      
+      if [ -n "$TENANT_DESCRIPTION" ]; then
+        TENANT_OPTIONS+=("$TENANT_ID" "$TENANT_NAME ($TENANT_DESCRIPTION)")
+      else
+        TENANT_OPTIONS+=("$TENANT_ID" "$TENANT_NAME")
+      fi
+    done
+    
+    # Display tenant selection menu
+    TENANT_ID=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "NETBOX TENANTS" \
+      --menu "Select a tenant for this IP address:" 16 78 8 \
+      "${TENANT_OPTIONS[@]}" 3>&1 1>&2 2>&3)
+    
+    if [ $? -ne 0 ] || [ "$TENANT_ID" == "0" ]; then
+      msg_info "No tenant selected. Proceeding without tenant assignment."
+      TENANT_ID=""
+    fi
+  fi
+  
   # Get the container's IP address
   IP=$(pct exec "$CTID" ip a s dev eth0 | awk '/inet / {print $2}' | cut -d/ -f1)
   
@@ -318,11 +360,28 @@ register_infrastructure() {
   fi
   
   # Prepare Netbox data
-  if [ -n "$dns_name" ]; then
+  if [ -n "$dns_name" ] && [ -n "$TENANT_ID" ]; then
+    NETBOX_DATA=$(cat <<EOF
+{
+  "address": "$NET",
+  $dns_name,
+  "tenant": $TENANT_ID
+}
+EOF
+)
+  elif [ -n "$dns_name" ]; then
     NETBOX_DATA=$(cat <<EOF
 {
   "address": "$NET",
   $dns_name
+}
+EOF
+)
+  elif [ -n "$TENANT_ID" ]; then
+    NETBOX_DATA=$(cat <<EOF
+{
+  "address": "$NET",
+  "tenant": $TENANT_ID
 }
 EOF
 )
@@ -340,7 +399,12 @@ EOF
     -H "Content-Type: application/json" \
     "$NBADDR/api/ipam/ip-addresses/" \
     --data "$NETBOX_DATA" > /dev/null
-  msg_ok "Added host to Netbox"
+  
+  if [ -n "$TENANT_ID" ]; then
+    msg_ok "Added host to Netbox with tenant ID: $TENANT_ID"
+  else
+    msg_ok "Added host to Netbox without tenant assignment"
+  fi
   
   # Register in pfSense DNS
   if [ -n "$DOMAIN1" ] && [ -n "$HN" ]; then
