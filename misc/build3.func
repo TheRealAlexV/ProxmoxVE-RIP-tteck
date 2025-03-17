@@ -1,0 +1,560 @@
+diagnostics_check() {
+  if ! [ -d "/usr/local/community-scripts" ]; then
+    mkdir -p /usr/local/community-scripts
+  fi
+
+  if ! [ -f "/usr/local/community-scripts/diagnostics" ]; then
+    if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "DIAGNOSTICS" --yesno "Send Diagnostics of LXC Installation?\n\n(This only transmits data without user data, just RAM, CPU, LXC name, ...)" 10 58); then
+      cat <<EOF >/usr/local/community-scripts/diagnostics
+DIAGNOSTICS=yes
+
+#This file is used to store the diagnostics settings for the Community-Scripts API.
+#https://github.com/community-scripts/ProxmoxVE/discussions/1836
+#Your diagnostics will be sent to the Community-Scripts API for troubleshooting/statistical purposes.
+#You can review the data at https://community-scripts.github.io/ProxmoxVE/data
+#If you do not wish to send diagnostics, please set the variable 'DIAGNOSTICS' to "no" in /usr/local/community-scripts/diagnostics, or use the menue.
+#This will disable the diagnostics feature.
+#To send diagnostics, set the variable 'DIAGNOSTICS' to "yes" in /usr/local/community-scripts/diagnostics, or use the menue.
+#This will enable the diagnostics feature.
+#The following information will be sent:
+#"ct_type"
+#"disk_size"
+#"core_count"
+#"ram_size"
+#"os_type"
+#"os_version"
+#"disableip6"
+#"nsapp"
+#"method"
+#"pve_version"
+#"status"
+#If you have any concerns, please review the source code at /misc/build.func
+EOF
+      DIAGNOSTICS="yes"
+    else
+      cat <<EOF >/usr/local/community-scripts/diagnostics
+DIAGNOSTICS=no
+
+#This file is used to store the diagnostics settings for the Community-Scripts API.
+#https://github.com/community-scripts/ProxmoxVE/discussions/1836
+#Your diagnostics will be sent to the Community-Scripts API for troubleshooting/statistical purposes.
+#You can review the data at https://community-scripts.github.io/ProxmoxVE/data
+#If you do not wish to send diagnostics, please set the variable 'DIAGNOSTICS' to "no" in /usr/local/community-scripts/diagnostics, or use the menue.
+#This will disable the diagnostics feature.
+#To send diagnostics, set the variable 'DIAGNOSTICS' to "yes" in /usr/local/community-scripts/diagnostics, or use the menue.
+#This will enable the diagnostics feature.
+#The following information will be sent:
+#"ct_type"
+#"disk_size"
+#"core_count"
+#"ram_size"
+#"os_type"
+#"os_version"
+#"disableip6"
+#"nsapp"
+#"method"
+#"pve_version"
+#"status"
+#If you have any concerns, please review the source code at /misc/build.func
+EOF
+      DIAGNOSTICS="no"
+    fi
+  else
+    DIAGNOSTICS=$(awk -F '=' '/^DIAGNOSTICS/ {print $2}' /usr/local/community-scripts/diagnostics)
+
+  fi
+
+}
+
+install_script() {
+  pve_check
+  shell_check
+  root_check
+  arch_check
+  ssh_check
+  maxkeys_check
+  diagnostics_check
+
+  if systemctl is-active -q ping-instances.service; then
+    systemctl -q stop ping-instances.service
+  fi
+  NEXTID=$(pvesh get /cluster/nextid)
+  timezone=$(cat /etc/timezone)
+  header_info
+  while true; do
+
+    CHOICE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "SETTINGS" --menu "Choose an option:" \
+      12 50 5 \
+      "1" "Default Settings" \
+      "2" "Default Settings (with verbose)" \
+      "3" "Advanced Settings" \
+      "4" "Diagnostic Settings" \
+      "5" "Exit" --nocancel --default-item "1" 3>&1 1>&2 2>&3)
+
+    if [ $? -ne 0 ]; then
+      echo -e "${CROSS}${RD} Menu canceled. Exiting.${CL}"
+      exit 0
+    fi
+
+    case $CHOICE in
+    1)
+      header_info
+      echo -e "${DEFAULT}${BOLD}${BL}Using Default Settings on node $PVEHOST_NAME${CL}"
+      VERB="no"
+      METHOD="default"
+      base_settings "$VERB"
+      echo_default
+      break
+      ;;
+    2)
+      header_info
+      echo -e "${DEFAULT}${BOLD}${BL}Using Default Settings on node $PVEHOST_NAME (${SEARCH}Verbose)${CL}"
+      VERB="yes"
+      METHOD="default"
+      base_settings "$VERB"
+      echo_default
+      break
+      ;;
+    3)
+      header_info
+      echo -e "${ADVANCED}${BOLD}${RD}Using Advanced Settings on node $PVEHOST_NAME${CL}"
+      METHOD="advanced"
+      base_settings
+      advanced_settings
+      break
+      ;;
+    4)
+      if [[ $DIAGNOSTICS == "yes" ]]; then
+        if whiptail --backtitle "Proxmox VE Helper Scripts" --title "DIAGNOSTICS SETTINGS" --yesno "Send Diagnostics of LXC Installation?\n\nCurrent setting: ${DIAGNOSTICS}" 10 58 \
+          --yes-button "No" --no-button "Back"; then
+          DIAGNOSTICS="no"
+          sed -i 's/^DIAGNOSTICS=.*/DIAGNOSTICS=no/' /usr/local/community-scripts/diagnostics
+          whiptail --backtitle "Proxmox VE Helper Scripts" --title "DIAGNOSTICS SETTINGS" --msgbox "Diagnostics settings changed to ${DIAGNOSTICS}." 8 58
+        fi
+      else
+        if whiptail --backtitle "Proxmox VE Helper Scripts" --title "DIAGNOSTICS SETTINGS" --yesno "Send Diagnostics of LXC Installation?\n\nCurrent setting: ${DIAGNOSTICS}" 10 58 \
+          --yes-button "Yes" --no-button "Back"; then
+          DIAGNOSTICS="yes"
+          sed -i 's/^DIAGNOSTICS=.*/DIAGNOSTICS=yes/' /usr/local/community-scripts/diagnostics
+          whiptail --backtitle "Proxmox VE Helper Scripts" --title "DIAGNOSTICS SETTINGS" --msgbox "Diagnostics settings changed to ${DIAGNOSTICS}." 8 58
+        fi
+      fi
+
+      ;;
+    5)
+      echo -e "${CROSS}${RD}Exiting.${CL}"
+      exit 0
+      ;;
+    *)
+      echo -e "${CROSS}${RD}Invalid option, please try again.${CL}"
+      ;;
+    esac
+  done
+}
+
+check_container_resources() {
+  # Check actual RAM & Cores
+  current_ram=$(free -m | awk 'NR==2{print $2}')
+  current_cpu=$(nproc)
+
+  # Check whether the current RAM is less than the required RAM or the CPU cores are less than required
+  if [[ "$current_ram" -lt "$var_ram" ]] || [[ "$current_cpu" -lt "$var_cpu" ]]; then
+    echo -e "\n${INFO}${HOLD} ${GN}Required: ${var_cpu} CPU, ${var_ram}MB RAM ${CL}| ${RD}Current: ${current_cpu} CPU, ${current_ram}MB RAM${CL}"
+    echo -e "${YWB}Please ensure that the ${APP} LXC is configured with at least ${var_cpu} vCPU and ${var_ram} MB RAM for the build process.${CL}\n"
+    echo -ne "${INFO}${HOLD} May cause data loss! ${INFO} Continue update with under-provisioned LXC? <yes/No>  "
+    read -r prompt
+    # Check if the input is 'yes', otherwise exit with status 1
+    if [[ ! ${prompt,,} =~ ^(yes)$ ]]; then
+      echo -e "${CROSS}${HOLD} ${YWB}Exiting based on user input.${CL}"
+      exit 1
+    fi
+  else
+    echo -e ""
+  fi
+}
+
+check_container_storage() {
+  # Check if the /boot partition is more than 80% full
+  total_size=$(df /boot --output=size | tail -n 1)
+  local used_size=$(df /boot --output=used | tail -n 1)
+  usage=$((100 * used_size / total_size))
+  if ((usage > 80)); then
+    # Prompt the user for confirmation to continue
+    echo -e "${INFO}${HOLD} ${YWB}Warning: Storage is dangerously low (${usage}%).${CL}"
+    echo -ne "Continue anyway? <y/N>  "
+    read -r prompt
+    # Check if the input is 'y' or 'yes', otherwise exit with status 1
+    if [[ ! ${prompt,,} =~ ^(y|yes)$ ]]; then
+      echo -e "${CROSS}${HOLD}${YWB}Exiting based on user input.${CL}"
+      exit 1
+    fi
+  fi
+}
+
+start() {
+  LOGDIR="/usr/local/community-scripts/logs"
+  mkdir -p "$LOGDIR"
+
+  if command -v pveversion >/dev/null 2>&1; then
+    if ! (whiptail --backtitle "Proxmox VE Helper Scripts" --title "${APP} LXC" --yesno "This will create a New ${APP} LXC. Proceed?" 10 58); then
+      clear
+      exit_script
+      exit
+    fi
+    SPINNER_PID=""
+    install_script
+  fi
+
+  if ! command -v pveversion >/dev/null 2>&1; then
+    CHOICE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "${APP} LXC Update/Setting" --menu \
+      "Support/Update functions for ${APP} LXC. Choose an option:" \
+      12 60 3 \
+      "1" "YES (Silent Mode)" \
+      "2" "YES (Verbose Mode)" \
+      "3" "NO (Cancel Update)" --nocancel --default-item "1" 3>&1 1>&2 2>&3)
+
+    case "$CHOICE" in
+    1)
+      VERB="no"
+      set_std_mode
+      log_message "INFO" "Update started (Silent Mode)"
+      ;;
+    2)
+      VERB="yes"
+      set_std_mode
+      log_message "INFO" "Update started (Verbose Mode)"
+      ;;
+    3)
+      clear
+      log_message "INFO" "Update aborted."
+      exit_script
+      exit
+      ;;
+    esac
+
+    SPINNER_PID=""
+    update_script
+  fi
+}
+
+# Function to set up SSH keys for the container
+setup_ssh_keys() {
+  msg_info "Setting up SSH Keys"
+  
+  # Enable root SSH login
+  pct exec "$CTID" -- sed -i 's\#PermitRootLogin prohibit-password\PermitRootLogin without-password\g' /etc/ssh/sshd_config
+  pct exec "$CTID" -- systemctl restart ssh
+  
+  # Prompt for GitHub username
+  if GITHUB_USER=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Enter GitHub username to add SSH keys (leave blank to skip)" 8 58 --title "SSH KEYS" 3>&1 1>&2 2>&3); then
+    if [ -n "$GITHUB_USER" ]; then
+      keycomment="github:${GITHUB_USER}"
+      
+      # Download keys from GitHub
+      tmpfile=$(mktemp)
+      curl -s "https://github.com/${GITHUB_USER}.keys" > "$tmpfile"
+      
+      if [[ $(stat -c'%s' "$tmpfile") -gt 1 ]]; then
+        # Add keys to root user
+        pct exec "$CTID" -- mkdir -p /root/.ssh
+        pct exec "$CTID" -- touch /root/.ssh/authorized_keys
+        
+        # Add comment to each key
+        sed -i -e "s/$/ ${keycomment}/" "$tmpfile"
+        
+        # Copy keys to container
+        cat "$tmpfile" | pct exec "$CTID" -- tee -a /root/.ssh/authorized_keys > /dev/null
+        pct exec "$CTID" -- bash -c "echo >> /root/.ssh/authorized_keys"
+        pct exec "$CTID" -- chmod 600 /root/.ssh/authorized_keys
+        
+        msg_ok "Added SSH keys from GitHub user: $GITHUB_USER"
+      else
+        msg_error "Couldn't get any keys for GitHub user: $GITHUB_USER"
+      fi
+      
+      rm "$tmpfile"
+    else
+      msg_info "No GitHub username provided, skipping SSH key setup"
+    fi
+  else
+    exit_script
+  fi
+  
+  msg_ok "SSH setup completed"
+}
+
+# Function to register the container in infrastructure systems
+register_infrastructure() {
+  msg_info "Registering infrastructure"
+  
+  # Check if config file was sourced successfully
+  if [ -z "$NBADDR" ] || [ -z "$NBTOKEN" ] || [ -z "$PFADDR" ] || [ -z "$PFTOKEN" ]; then
+    msg_error "API credentials not found. Infrastructure registration skipped."
+    return
+  fi
+  
+  # Get the container's IP address
+  IP=$(pct exec "$CTID" ip a s dev eth0 | awk '/inet / {print $2}' | cut -d/ -f1)
+  
+  if [ -z "$IP" ]; then
+    msg_error "Could not determine container IP address"
+    return
+  fi
+  
+  # Register in Netbox
+  msg_info "Adding host to Netbox"
+  NETBOX_DATA=$(cat <<EOF
+{
+  "address": "$NET",
+  "dns_name": "$HN.$DOMAIN1"
+}
+EOF
+)
+  
+  curl -s -X POST \
+    -H "Authorization: Token $NBTOKEN" \
+    -H "Content-Type: application/json" \
+    "$NBADDR/api/ipam/ip-addresses/" \
+    --data "$NETBOX_DATA" > /dev/null
+  
+  # Register in pfSense DNS
+  if [ -n "$DOMAIN1" ] && [ -n "$HN" ]; then
+    msg_info "Adding host to pfSense DNS"
+    curl -k -s -X 'POST' \
+      "$PFADDR/api/v2/services/dns_resolver/host_override" \
+      -H "X-API-Key: $PFTOKEN" \
+      -H 'accept: application/json' \
+      -H 'Content-Type: application/json' \
+      --data "{\"apply\": true, \"domain\": \"$DOMAIN1\", \"host\": \"$HN\", \"ip\": [\"$(echo $NET | cut -d "/" -f1)\"]}" > /dev/null
+  fi
+  
+  # Register in pfSense firewall aliases
+  msg_info "Adding host to pfSense firewall aliases"
+  curl -k -s -X 'POST' \
+    "$PFADDR/api/v2/firewall/alias" \
+    -H "X-API-Key: $PFTOKEN" \
+    -H 'accept: application/json' \
+    -H 'Content-Type: application/json' \
+    --data "{\"address\": [\"$(echo $NET | cut -d "/" -f1)\"], \"apply\": true, \"name\": \"infra_${HN}_${NETNAME}\", \"type\": \"host\"}" > /dev/null
+  
+  msg_ok "Infrastructure registration completed"
+}
+
+# This function collects user settings and integrates all the collected information.
+build_container() {
+  #  if [ "$VERB" == "yes" ]; then set -x; fi
+
+  if [ "$CT_TYPE" == "1" ]; then
+    FEATURES="keyctl=1,nesting=1"
+  else
+    FEATURES="nesting=1"
+  fi
+
+  if [[ $DIAGNOSTICS == "yes" ]]; then
+    post_to_api
+  fi
+
+  TEMP_DIR=$(mktemp -d)
+  pushd $TEMP_DIR >/dev/null
+  if [ "$var_os" == "alpine" ]; then
+    export FUNCTIONS_FILE_PATH="$(curl -s https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/alpine-install.func)"
+  else
+    export FUNCTIONS_FILE_PATH="$(curl -s https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/install.func)"
+  fi
+  export RANDOM_UUID="$RANDOM_UUID"
+  export CACHER="$APT_CACHER"
+  export CACHER_IP="$APT_CACHER_IP"
+  export tz="$timezone"
+  export DISABLEIPV6="$DISABLEIP6"
+  export APPLICATION="$APP"
+  export app="$NSAPP"
+  export PASSWORD="$PW"
+  export VERBOSE="$VERB"
+  export SSH_ROOT="${SSH}"
+  export SSH_AUTHORIZED_KEY
+  export CTID="$CT_ID"
+  export CTTYPE="$CT_TYPE"
+  export PCT_OSTYPE="$var_os"
+  export PCT_OSVERSION="$var_version"
+  export PCT_DISK_SIZE="$DISK_SIZE"
+  export PCT_OPTIONS="
+    -features $FEATURES
+    -hostname $HN
+    -tags $TAGS
+    $SD
+    $NS
+    -net0 name=eth0,bridge=$BRG$MAC,ip=$NET$GATE$VLAN$MTU
+    -onboot 1
+    -cores $CORE_COUNT
+    -memory $RAM_SIZE
+    -unprivileged $CT_TYPE
+    $PW
+  "
+  # This executes create_lxc.sh and creates the container and .conf file
+  bash -c "$(wget -qLO - https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/create_lxc.sh)" || exit $?
+
+  LXC_CONFIG=/etc/pve/lxc/${CTID}.conf
+  if [ "$CT_TYPE" == "0" ]; then
+    cat <<EOF >>$LXC_CONFIG
+# USB passthrough
+lxc.cgroup2.devices.allow: a
+lxc.cap.drop:
+lxc.cgroup2.devices.allow: c 188:* rwm
+lxc.cgroup2.devices.allow: c 189:* rwm
+lxc.mount.entry: /dev/serial/by-id  dev/serial/by-id  none bind,optional,create=dir
+lxc.mount.entry: /dev/ttyUSB0       dev/ttyUSB0       none bind,optional,create=file
+lxc.mount.entry: /dev/ttyUSB1       dev/ttyUSB1       none bind,optional,create=file
+lxc.mount.entry: /dev/ttyACM0       dev/ttyACM0       none bind,optional,create=file
+lxc.mount.entry: /dev/ttyACM1       dev/ttyACM1       none bind,optional,create=file
+EOF
+  fi
+
+  if [ "$CT_TYPE" == "0" ]; then
+    if [[ "$APP" == "Channels" || "$APP" == "Emby" || "$APP" == "ErsatzTV" || "$APP" == "Frigate" || "$APP" == "Jellyfin" || "$APP" == "Plex" || "$APP" == "Scrypted" || "$APP" == "Tdarr" || "$APP" == "Unmanic" || "$APP" == "Ollama" ]]; then
+      cat <<EOF >>$LXC_CONFIG
+# VAAPI hardware transcoding
+lxc.cgroup2.devices.allow: c 226:0 rwm
+lxc.cgroup2.devices.allow: c 226:128 rwm
+lxc.cgroup2.devices.allow: c 29:0 rwm
+lxc.mount.entry: /dev/fb0 dev/fb0 none bind,optional,create=file
+lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
+lxc.mount.entry: /dev/dri/renderD128 dev/dri/renderD128 none bind,optional,create=file
+EOF
+    fi
+  else
+    if [[ "$APP" == "Channels" || "$APP" == "Emby" || "$APP" == "ErsatzTV" || "$APP" == "Frigate" || "$APP" == "Jellyfin" || "$APP" == "Plex" || "$APP" == "Scrypted" || "$APP" == "Tdarr" || "$APP" == "Unmanic" || "$APP" == "Ollama" ]]; then
+      if [[ -e "/dev/dri/renderD128" ]]; then
+        if [[ -e "/dev/dri/card0" ]]; then
+          cat <<EOF >>$LXC_CONFIG
+# VAAPI hardware transcoding
+dev0: /dev/dri/card0,gid=44
+dev1: /dev/dri/renderD128,gid=104
+EOF
+        else
+          cat <<EOF >>$LXC_CONFIG
+# VAAPI hardware transcoding
+dev0: /dev/dri/card1,gid=44
+dev1: /dev/dri/renderD128,gid=104
+EOF
+        fi
+      fi
+    fi
+  fi
+
+  # This starts the container and executes <app>-install.sh
+  msg_info "Starting LXC Container"
+  pct start "$CTID"
+  msg_ok "Started LXC Container"
+  if [ "$var_os" == "alpine" ]; then
+    sleep 3
+    pct exec "$CTID" -- /bin/sh -c 'cat <<EOF >/etc/apk/repositories
+http://dl-cdn.alpinelinux.org/alpine/latest-stable/main
+http://dl-cdn.alpinelinux.org/alpine/latest-stable/community
+EOF'
+    pct exec "$CTID" -- ash -c "apk add bash >/dev/null"
+  fi
+  lxc-attach -n "$CTID" -- bash -c "$(wget -qLO - https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/$var_install.sh)" || exit $?
+
+  # Setup SSH keys if SSH is enabled
+  if [[ "${SSH}" == "yes" ]]; then
+    setup_ssh_keys
+  fi
+  
+  # Register infrastructure if not using DHCP
+  if [ "$NET" != "dhcp" ]; then
+    register_infrastructure
+  fi
+
+}
+
+# This function sets the description of the container.
+description() {
+  IP=$(pct exec "$CTID" ip a s dev eth0 | awk '/inet / {print $2}' | cut -d/ -f1)
+
+  # Generate LXC Description
+  DESCRIPTION=$(
+    cat <<EOF
+<div align='center'>
+  <a href='https://Helper-Scripts.com' target='_blank' rel='noopener noreferrer'>
+    <img src='https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/images/logo-81x112.png' alt='Logo' style='width:81px;height:112px;'/>
+  </a>
+
+  <h2 style='font-size: 24px; margin: 20px 0;'>${APP} LXC</h2>
+
+  <p style='margin: 16px 0;'>
+    <a href='https://ko-fi.com/community_scripts' target='_blank' rel='noopener noreferrer'>
+      <img src='https://img.shields.io/badge/&#x2615;-Buy us a coffee-blue' alt='spend Coffee' />
+    </a>
+  </p>
+  
+  <span style='margin: 0 10px;'>
+    <i class="fa fa-github fa-fw" style="color: #f5f5f5;"></i>
+    <a href='https://github.com/community-scripts/ProxmoxVE' target='_blank' rel='noopener noreferrer' style='text-decoration: none; color: #00617f;'>GitHub</a>
+  </span>
+  <span style='margin: 0 10px;'>
+    <i class="fa fa-comments fa-fw" style="color: #f5f5f5;"></i>
+    <a href='https://github.com/community-scripts/ProxmoxVE/discussions' target='_blank' rel='noopener noreferrer' style='text-decoration: none; color: #00617f;'>Discussions</a>
+  </span>
+  <span style='margin: 0 10px;'>
+    <i class="fa fa-exclamation-circle fa-fw" style="color: #f5f5f5;"></i>
+    <a href='https://github.com/community-scripts/ProxmoxVE/issues' target='_blank' rel='noopener noreferrer' style='text-decoration: none; color: #00617f;'>Issues</a>
+  </span>
+</div>
+EOF
+  )
+
+  # Set Description in LXC
+  pct set "$CTID" -description "$DESCRIPTION"
+
+  if [[ -f /etc/systemd/system/ping-instances.service ]]; then
+    systemctl start ping-instances.service
+  fi
+
+  post_update_to_api "done" "none"
+}
+
+set_std_mode() {
+  if [ "$VERB" = "yes" ]; then
+    STD=""
+  else
+    STD="silent"
+  fi
+}
+
+# Silent execution function
+silent() {
+  if [ "$VERB" = "no" ]; then
+    "$@" >>"$LOGFILE" 2>&1
+  else
+    "$@" 2>&1 | tee -a "$LOGFILE"
+  fi
+}
+
+exit_script() {
+  exit_code=$? # Capture the exit status of the last executed command
+  #200 exit codes indicate error in create_lxc.sh
+  #100 exit codes indicate error in install.func
+
+  if [ $exit_code -ne 0 ]; then  
+    case $exit_code in
+      100) post_update_to_api "failed" "100: Unexpected error in create_lxc.sh" ;;
+      101) post_update_to_api "failed" "101: No network connection detected in create_lxc.sh" ;;
+      200) post_update_to_api "failed" "200: LXC creation failed in create_lxc.sh" ;;
+      201) post_update_to_api "failed" "201: Invalid Storage class in create_lxc.sh" ;;
+      202) post_update_to_api "failed" "202: User aborted menu in create_lxc.sh" ;;
+      203) post_update_to_api "failed" "203: CTID not set in create_lxc.sh" ;;
+      204) post_update_to_api "failed" "204: PCT_OSTYPE not set in create_lxc.sh" ;;
+      205) post_update_to_api "failed" "205: CTID cannot be less than 100 in create_lxc.sh" ;;
+      206) post_update_to_api "failed" "206: CTID already in use in create_lxc.sh" ;;
+      207) post_update_to_api "failed" "207: Template not found in create_lxc.sh" ;;
+      208) post_update_to_api "failed" "208: Error downloading template in create_lxc.sh" ;;
+      209) post_update_to_api "failed" "209: Container creation failed, but template is intact in create_lxc.sh" ;;
+      *)   post_update_to_api "failed" "Unknown error, exit code: $exit_code in create_lxc.sh" ;;
+    esac
+  fi
+}
+
+trap 'exit_script' EXIT
+trap 'post_update_to_api "failed" "$BASH_COMMAND"' ERR
+trap 'post_update_to_api "failed" "INTERRUPTED"' SIGINT
+trap 'post_update_to_api "failed" "TERMINATED"' SIGTERM
