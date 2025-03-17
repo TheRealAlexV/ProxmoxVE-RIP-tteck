@@ -314,6 +314,9 @@ register_infrastructure() {
   # Extract tenant information for display
   TENANTS_COUNT=$(echo "$TENANTS_JSON" | jq '.count')
   
+  # Stop the spinner before displaying the whiptail dialog
+  msg_ok "Fetched tenant information"
+  
   if [ "$TENANTS_COUNT" -eq 0 ]; then
     msg_info "No tenants found in Netbox. Proceeding without tenant assignment."
     TENANT_ID=""
