@@ -380,52 +380,75 @@ advanced_settings() {
   done
 
   if [ "$NET" != "dhcp" ]; then
-    while true; do
-      GATE1=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Enter gateway IP address" 8 58 --title "Gateway IP" 3>&1 1>&2 2>&3)
-      if [ -z "$GATE1" ]; then
-        whiptail --backtitle "Proxmox VE Helper Scripts" --msgbox "Gateway IP address cannot be empty" 8 58
-      # Check if we have Netbox prefix details and try to get gateway from custom fields
-      elif [ -n "$NBPREFIX" ] && [ -n "$PREFIX_DETAILS" ]; then
-        # Try to get gateway from custom fields
-        GATEWAY_INFO=$(echo "$PREFIX_DETAILS" | jq -r '.custom_fields.Gateways[0].address // ""')
+    # Check if we have Netbox prefix details and try to get gateway from custom fields
+    if [ -n "$NBPREFIX" ] && [ -n "$PREFIX_DETAILS" ]; then
+      # Try to get gateway from custom fields
+      GATEWAY_INFO=$(echo "$PREFIX_DETAILS" | jq -r '.custom_fields.Gateways[0].address // ""')
+      
+      if [ -n "$GATEWAY_INFO" ] && [ "$GATEWAY_INFO" != "null" ]; then
+        # Extract IP from CIDR notation if needed
+        NETBOX_GATE=$(echo "$GATEWAY_INFO" | cut -d '/' -f 1)
         
-        if [ -n "$GATEWAY_INFO" ] && [ "$GATEWAY_INFO" != "null" ]; then
-          # Extract IP from CIDR notation if needed
-          GATE1=$(echo "$GATEWAY_INFO" | cut -d '/' -f 1)
-          
-          # Display in whiptail for confirmation
-          if whiptail --backtitle "Proxmox VE Helper Scripts" --title "GATEWAY" \
-              --yesno "Use gateway $GATE1 from Netbox?\n\nSelect 'No' to enter a different gateway." 10 58; then
-            GATE=",gw=$GATE1"
-            echo -e "${GATEWAY}${BOLD}${DGN}Gateway IP Address: ${BGN}$GATE1${CL}"
-            break
-          else
-            # Manual gateway entry if user doesn't want to use the one from Netbox
+        # Ask user to choose between Netbox gateway or manual entry
+        GATEWAY_CHOICE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "GATEWAY SELECTION" --menu \
+          "Choose gateway option:" 12 58 2 \
+          "netbox" "Use Netbox gateway: $NETBOX_GATE" \
+          "manual" "Enter gateway manually" \
+          3>&1 1>&2 2>&3)
+        
+        if [ $? -ne 0 ]; then
+          exit_script
+        fi
+        
+        if [ "$GATEWAY_CHOICE" == "netbox" ]; then
+          GATE1="$NETBOX_GATE"
+          GATE=",gw=$GATE1"
+          echo -e "${GATEWAY}${BOLD}${DGN}Gateway IP Address: ${BGN}$GATE1${CL}"
+        else
+          # Manual gateway entry
+          while true; do
             GATE1=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Enter gateway IP address" 8 58 --title "GATEWAY IP" 3>&1 1>&2 2>&3)
             if [ -z "$GATE1" ]; then
               whiptail --backtitle "Proxmox VE Helper Scripts" --msgbox "Gateway IP address cannot be empty for static IP configuration" 8 58
-              continue
             elif [[ ! "$GATE1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
               whiptail --backtitle "Proxmox VE Helper Scripts" --msgbox "Invalid IP address format" 8 58
-              continue
             else
               GATE=",gw=$GATE1"
               echo -e "${GATEWAY}${BOLD}${DGN}Gateway IP Address: ${BGN}$GATE1${CL}"
               break
             fi
+          done
+        fi
+      else
+        # No gateway in Netbox, ask for manual entry
+        while true; do
+          GATE1=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Enter gateway IP address" 8 58 --title "GATEWAY IP" 3>&1 1>&2 2>&3)
+          if [ -z "$GATE1" ]; then
+            whiptail --backtitle "Proxmox VE Helper Scripts" --msgbox "Gateway IP address cannot be empty for static IP configuration" 8 58
+          elif [[ ! "$GATE1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+            whiptail --backtitle "Proxmox VE Helper Scripts" --msgbox "Invalid IP address format" 8 58
+          else
+            GATE=",gw=$GATE1"
+            echo -e "${GATEWAY}${BOLD}${DGN}Gateway IP Address: ${BGN}$GATE1${CL}"
+            break
           fi
+        done
+      fi
+    else
+      # No Netbox prefix details, ask for manual entry
+      while true; do
+        GATE1=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Enter gateway IP address" 8 58 --title "GATEWAY IP" 3>&1 1>&2 2>&3)
+        if [ -z "$GATE1" ]; then
+          whiptail --backtitle "Proxmox VE Helper Scripts" --msgbox "Gateway IP address cannot be empty for static IP configuration" 8 58
         elif [[ ! "$GATE1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
           whiptail --backtitle "Proxmox VE Helper Scripts" --msgbox "Invalid IP address format" 8 58
-          continue
+        else
+          GATE=",gw=$GATE1"
+          echo -e "${GATEWAY}${BOLD}${DGN}Gateway IP Address: ${BGN}$GATE1${CL}"
+          break
         fi
-      elif [[ ! "$GATE1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-        whiptail --backtitle "Proxmox VE Helper Scripts" --msgbox "Invalid IP address format" 8 58
-      else
-        GATE=",gw=$GATE1"
-        echo -e "${GATEWAY}${BOLD}${DGN}Gateway IP Address: ${BGN}$GATE1${CL}"
-        break
-      fi
-    done
+      done
+    fi
   else
     GATE=""
     echo -e "${GATEWAY}${BOLD}${DGN}Gateway IP Address: ${BGN}Default${CL}"
