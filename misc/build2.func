@@ -551,7 +551,13 @@ advanced_settings() {
       
       if [ "$VLAN_CHOICE" == "netbox" ]; then
         VLAN1=$VLAN_VID
-        VLAN=",tag=$VLAN1"
+        # Special handling for VLAN 1 - no tagging
+        if [ "$VLAN1" == "1" ]; then
+          VLAN=""
+          VLAN1="Default (VLAN 1)"
+        else
+          VLAN=",tag=$VLAN1"
+        fi
         echo -e "${VLANTAG}${BOLD}${DGN}VLAN: ${BGN}$VLAN1${CL}"
       else
         # Manual VLAN entry
@@ -563,7 +569,13 @@ advanced_settings() {
         if [ -z "$VLAN1" ]; then
           VLAN1="Default"
           VLAN=""
+        # Special handling for VLAN 1 - no tagging
+        elif [ "$VLAN1" == "1" ]; then
+          VLAN=""
+          VLAN1="Default (VLAN 1)"
         else
+          # For all other VLANs, add the tag
+          # VLAN 1 is handled above
           VLAN=",tag=$VLAN1"
         fi
         echo -e "${VLANTAG}${BOLD}${DGN}VLAN: ${BGN}$VLAN1${CL}"
@@ -579,7 +591,13 @@ advanced_settings() {
         VLAN1="Default"
         VLAN=""
       else
-        VLAN=",tag=$VLAN1"
+        # Special handling for VLAN 1 - no tagging
+        if [ "$VLAN1" == "1" ]; then
+          VLAN=""
+          VLAN1="Default (VLAN 1)"
+        else
+          VLAN=",tag=$VLAN1"
+        fi
       fi
       echo -e "${VLANTAG}${BOLD}${DGN}VLAN: ${BGN}$VLAN1${CL}"
     fi
@@ -594,7 +612,13 @@ advanced_settings() {
       VLAN1="Default"
       VLAN=""
     else
-      VLAN=",tag=$VLAN1"
+      # Special handling for VLAN 1 - no tagging
+      if [ "$VLAN1" == "1" ]; then
+        VLAN=""
+        VLAN1="Default (VLAN 1)"
+      else
+        VLAN=",tag=$VLAN1"
+      fi
     fi
     echo -e "${VLANTAG}${BOLD}${DGN}VLAN: ${BGN}$VLAN1${CL}"
   fi
