@@ -426,8 +426,15 @@ EOF
   # Extract IP without CIDR
   IP_ADDR=$(echo $NET | cut -d "/" -f1)
   
-  # Create alias name using short hostname and network name
-  ALIAS_NAME="infra_${SHORTHOST}_${NETNAME:-default}"
+  # Create alias name using short hostname and filtered network name
+  # Extract the label part from NETNAME (remove VLAN number and period)
+  if [ -n "$NETNAME" ]; then
+    # If NETNAME contains a period, extract the part after the period
+    FILTERED_NETNAME=$(echo "$NETNAME" | sed -E 's/^[0-9]+\.//g')
+  else
+    FILTERED_NETNAME="default"
+  fi
+  ALIAS_NAME="infra_${SHORTHOST}_${FILTERED_NETNAME}"
   
   # Create a description for the alias
   ALIAS_DESCR="Infrastructure host: ${SHORTHOST}"
