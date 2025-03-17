@@ -522,42 +522,45 @@ advanced_settings() {
     exit_script
   fi
 
-  if VLAN1=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set a Vlan(leave blank for no VLAN)" 8 58 --title "VLAN" 3>&1 1>&2 2>&3); then
-    # Check if we have Netbox prefix details and try to get VLAN from prefix
-    if [ -n "$NBPREFIX" ] && [ -n "$PREFIX_DETAILS" ]; then
-      # Get VLAN information from prefix details
-      VLAN_ID=$(echo "$PREFIX_DETAILS" | jq -r '.vlan.id // ""')
+  # Check if we have Netbox prefix details and try to get VLAN from prefix
+  if [ -n "$NBPREFIX" ] && [ -n "$PREFIX_DETAILS" ]; then
+    # Get VLAN information from prefix details
+    VLAN_ID=$(echo "$PREFIX_DETAILS" | jq -r '.vlan.id // ""')
+    
+    if [ -n "$VLAN_ID" ] && [ "$VLAN_ID" != "null" ]; then
+      # Get VLAN details
+      VLAN_DETAILS=$(curl -s -X GET \
+          -H "Authorization: Token $NBTOKEN" \
+          -H "Content-Type: application/json" \
+          -H "Accept: application/json; indent=4" \
+          "$NBADDR/api/ipam/vlans/$VLAN_ID/")
       
-      if [ -n "$VLAN_ID" ] && [ "$VLAN_ID" != "null" ]; then
-        # Get VLAN details
-        VLAN_DETAILS=$(curl -s -X GET \
-            -H "Authorization: Token $NBTOKEN" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json; indent=4" \
-            "$NBADDR/api/ipam/vlans/$VLAN_ID/")
-        
-        VLAN_VID=$(echo "$VLAN_DETAILS" | jq -r '.vid')
-        VLAN_NAME=$(echo "$VLAN_DETAILS" | jq -r '.name')
-        
-        # Display in whiptail for confirmation
-        if whiptail --backtitle "Proxmox VE Helper Scripts" --title "VLAN" \
-            --yesno "Use VLAN $VLAN_VID ($VLAN_NAME) from Netbox?\n\nSelect 'No' to enter a different VLAN." 10 58; then
-          VLAN1=$VLAN_VID
-          VLAN=",tag=$VLAN1"
-          echo -e "${VLANTAG}${BOLD}${DGN}VLAN: ${BGN}$VLAN1${CL}"
-        else
-          # Use the user-provided VLAN
-          if [ -z $VLAN1 ]; then
-            VLAN1="Default"
-            VLAN=""
-          else
-            VLAN=",tag=$VLAN1"
-          fi
-          echo -e "${VLANTAG}${BOLD}${DGN}VLAN: ${BGN}$VLAN1${CL}"
-        fi
+      VLAN_VID=$(echo "$VLAN_DETAILS" | jq -r '.vid')
+      VLAN_NAME=$(echo "$VLAN_DETAILS" | jq -r '.name')
+      
+      # Ask user to choose between Netbox VLAN or manual entry
+      VLAN_CHOICE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "VLAN SELECTION" --menu \
+        "Choose VLAN option:" 12 58 2 \
+        "netbox" "Use Netbox VLAN: $VLAN_VID ($VLAN_NAME)" \
+        "manual" "Enter VLAN manually" \
+        3>&1 1>&2 2>&3)
+      
+      if [ $? -ne 0 ]; then
+        exit_script
+      fi
+      
+      if [ "$VLAN_CHOICE" == "netbox" ]; then
+        VLAN1=$VLAN_VID
+        VLAN=",tag=$VLAN1"
+        echo -e "${VLANTAG}${BOLD}${DGN}VLAN: ${BGN}$VLAN1${CL}"
       else
-        # Use the user-provided VLAN
-        if [ -z $VLAN1 ]; then
+        # Manual VLAN entry
+        VLAN1=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set a VLAN (leave blank for no VLAN)" 8 58 --title "VLAN" 3>&1 1>&2 2>&3)
+        if [ $? -ne 0 ]; then
+          exit_script
+        fi
+        
+        if [ -z "$VLAN1" ]; then
           VLAN1="Default"
           VLAN=""
         else
@@ -566,8 +569,13 @@ advanced_settings() {
         echo -e "${VLANTAG}${BOLD}${DGN}VLAN: ${BGN}$VLAN1${CL}"
       fi
     else
-      # Use the user-provided VLAN
-      if [ -z $VLAN1 ]; then
+      # No VLAN in Netbox, ask for manual entry
+      VLAN1=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set a VLAN (leave blank for no VLAN)" 8 58 --title "VLAN" 3>&1 1>&2 2>&3)
+      if [ $? -ne 0 ]; then
+        exit_script
+      fi
+      
+      if [ -z "$VLAN1" ]; then
         VLAN1="Default"
         VLAN=""
       else
@@ -576,7 +584,19 @@ advanced_settings() {
       echo -e "${VLANTAG}${BOLD}${DGN}VLAN: ${BGN}$VLAN1${CL}"
     fi
   else
-    exit_script
+    # No Netbox prefix details, ask for manual entry
+    VLAN1=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set a VLAN (leave blank for no VLAN)" 8 58 --title "VLAN" 3>&1 1>&2 2>&3)
+    if [ $? -ne 0 ]; then
+      exit_script
+    fi
+    
+    if [ -z "$VLAN1" ]; then
+      VLAN1="Default"
+      VLAN=""
+    else
+      VLAN=",tag=$VLAN1"
+    fi
+    echo -e "${VLANTAG}${BOLD}${DGN}VLAN: ${BGN}$VLAN1${CL}"
   fi
 
   if ADV_TAGS=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set Custom Tags?[If you remove all, there will be no tags!]" 8 58 ${TAGS} --title "Advanced Tags" 3>&1 1>&2 2>&3); then
