@@ -14,6 +14,17 @@ source_config() {
   fi
 }
 
+# Function to parse hostname and domain
+parse_hostname() {
+  # If HN contains dots, split it into SHORTHOST and DOMAIN1
+  if [[ "$HN" == *"."* ]]; then
+    SHORTHOST=$(echo "$HN" | cut -d '.' -f 1)
+    DOMAIN1=$(echo "$HN" | cut -d '.' -f 2-)
+  else
+    SHORTHOST="$HN"
+  fi
+}
+
 variables() {
   NSAPP=$(echo ${APP,,} | tr -d ' ')                # This function sets the NSAPP variable by converting the value of the APP variable to lowercase and removing any spaces.
   var_install="${NSAPP}-install"                    # sets the var_install variable by appending "-install" to the value of NSAPP.
@@ -25,6 +36,9 @@ variables() {
   
   # Source the config file for API credentials
   source_config
+  
+  # Initialize hostname variables
+  SHORTHOST=""
 }
 
 source <(curl -s https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/api.func)

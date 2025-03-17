@@ -206,25 +206,10 @@ advanced_settings() {
 
   if CT_NAME=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set Hostname" 8 58 $NSAPP --title "HOSTNAME" 3>&1 1>&2 2>&3); then
     if [ -z "$CT_NAME" ]; then
-      HN="$NSAPP"
-    else
-      # Convert to lowercase and remove spaces
-      CT_NAME=$(echo ${CT_NAME,,} | tr -d ' ')
-      HN="$CT_NAME"
-    fi
-    
-    # Check if hostname contains a domain
-    if [[ "$HN" == *"."* ]]; then
-      # Extract hostname and domain
-      DOMAIN1=$(echo "$HN" | cut -d '.' -f 2-)
-      HN=$(echo "$HN" | cut -d '.' -f 1)
-      echo -e "${HOSTNAME}${BOLD}${DGN}Hostname: ${BGN}$HN${CL}"
-      echo -e "${HOSTNAME}${BOLD}${DGN}Domain: ${BGN}$DOMAIN1${CL}"
-    else
-      # Always prompt for domain when hostname doesn't contain dots
-      echo -e "${HOSTNAME}${BOLD}${DGN}Hostname: ${BGN}$HN${CL}"
+      # Use default app name as hostname
+      SHORTHOST="$NSAPP"
       
-      # Use a while loop to ensure we get a response
+      # Prompt for domain
       while true; do
         DOMAIN1=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set Domain Name (e.g., example.com)\nLeave empty for none" 10 58 --title "DOMAIN NAME" 3>&1 1>&2 2>&3)
         if [ $? -eq 0 ]; then
@@ -234,8 +219,35 @@ advanced_settings() {
         fi
       done
       
-      echo -e "${HOSTNAME}${BOLD}${DGN}Domain: ${BGN}${DOMAIN1:-none}${CL}"
+      # Construct full FQDN if domain is provided
+      if [ -n "$DOMAIN1" ]; then
+        HN="${SHORTHOST}.${DOMAIN1}"
+      else
+        HN="$SHORTHOST"
+      fi
+    else
+      # Convert to lowercase and remove spaces
+      CT_NAME=$(echo ${CT_NAME,,} | tr -d ' ')
+      
+      # Store the full hostname as entered
+      HN="$CT_NAME"
+      
+      # Check if hostname contains a domain
+      if [[ "$HN" == *"."* ]]; then
+        # Extract short hostname (first part) and domain (everything else)
+        SHORTHOST=$(echo "$HN" | cut -d '.' -f 1)
+        DOMAIN1=$(echo "$HN" | cut -d '.' -f 2-)
+      else
+        # No domain in hostname
+        SHORTHOST="$HN"
+        DOMAIN1=""
+      fi
     fi
+    
+    # Display hostname information
+    echo -e "${HOSTNAME}${BOLD}${DGN}Full Hostname: ${BGN}$HN${CL}"
+    echo -e "${HOSTNAME}${BOLD}${DGN}Short Hostname: ${BGN}$SHORTHOST${CL}"
+    echo -e "${HOSTNAME}${BOLD}${DGN}Domain: ${BGN}${DOMAIN1:-none}${CL}"
   else
     exit_script
   fi

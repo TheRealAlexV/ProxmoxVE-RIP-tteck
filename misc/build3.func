@@ -311,16 +311,24 @@ register_infrastructure() {
     return
   fi
   
-  # Prepare Netbox data
+  # Prepare DNS name for Netbox
+  local dns_name=""
   if [ -n "$DOMAIN1" ]; then
+    dns_name="\"dns_name\": \"$SHORTHOST.$DOMAIN1\""
+  fi
+  
+  # Prepare Netbox data
+  if [ -n "$dns_name" ]; then
     NETBOX_DATA=$(cat <<EOF
 {
   "address": "$NET",
-  "dns_name": "$HN.$DOMAIN1"
+  $dns_name
 }
 EOF
 )
   else
+    # No domain, just use the IP address
+    msg_info "No domain specified, using IP address only for Netbox"
     NETBOX_DATA="{\"address\": \"$NET\"}"
   fi
   
@@ -332,26 +340,38 @@ EOF
     -H "Content-Type: application/json" \
     "$NBADDR/api/ipam/ip-addresses/" \
     --data "$NETBOX_DATA" > /dev/null
+  msg_ok "Added host to Netbox"
   
   # Register in pfSense DNS
   if [ -n "$DOMAIN1" ] && [ -n "$HN" ]; then
     msg_info "Adding host to pfSense DNS"
+    # Extract IP without CIDR
+    IP_ADDR=$(echo $NET | cut -d "/" -f1)
+    
     curl -k -s -X 'POST' \
       "$PFADDR/api/v2/services/dns_resolver/host_override" \
       -H "X-API-Key: $PFTOKEN" \
       -H 'accept: application/json' \
       -H 'Content-Type: application/json' \
-      --data "{\"apply\": true, \"domain\": \"$DOMAIN1\", \"host\": \"$HN\", \"ip\": [\"$(echo $NET | cut -d "/" -f1)\"]}" > /dev/null
+      --data "{\"apply\": true, \"domain\": \"$DOMAIN1\", \"host\": \"$SHORTHOST\", \"ip\": [\"$IP_ADDR\"]}" > /dev/null
+    msg_ok "Added host to pfSense DNS"
   fi
   
   # Register in pfSense firewall aliases
   msg_info "Adding host to pfSense firewall aliases"
+  # Extract IP without CIDR
+  IP_ADDR=$(echo $NET | cut -d "/" -f1)
+  
+  # Create alias name using short hostname and network name
+  ALIAS_NAME="infra_${SHORTHOST}_${NETNAME:-default}"
+  
   curl -k -s -X 'POST' \
     "$PFADDR/api/v2/firewall/alias" \
     -H "X-API-Key: $PFTOKEN" \
     -H 'accept: application/json' \
     -H 'Content-Type: application/json' \
-    --data "{\"address\": [\"$(echo $NET | cut -d "/" -f1)\"], \"apply\": true, \"name\": \"infra_${HN}_${NETNAME}\", \"type\": \"host\"}" > /dev/null
+    --data "{\"address\": [\"$IP_ADDR\"], \"apply\": true, \"name\": \"$ALIAS_NAME\", \"type\": \"host\"}" > /dev/null
+  msg_ok "Added host to pfSense firewall aliases"
   
   msg_ok "Infrastructure registration completed"
 }
@@ -389,6 +409,7 @@ build_container() {
   export SSH_ROOT="${SSH}"
   export GITHUB_USERNAME
   export DOMAIN1
+  export SHORTHOST
   export SSH_KEY_SOURCE
   export SSH_AUTHORIZED_KEY
   export CTID="$CT_ID"
