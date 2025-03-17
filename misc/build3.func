@@ -429,14 +429,30 @@ EOF
   # Create alias name using short hostname and network name
   ALIAS_NAME="infra_${SHORTHOST}_${NETNAME:-default}"
   
+  # Create a description for the alias
+  ALIAS_DESCR="Infrastructure host: ${SHORTHOST}"
+  if [ -n "$DOMAIN1" ]; then
+    ALIAS_DESCR="${ALIAS_DESCR}.${DOMAIN1}"
+  fi
+  
+  # Prepare the JSON payload
+  ALIAS_DATA="{\"address\": [\"$IP_ADDR\"], \"apply\": true, \"name\": \"$ALIAS_NAME\", \"type\": \"host\", \"descr\": \"$ALIAS_DESCR\"}"
+  
+  # Make the API call and capture the response
+  ALIAS_RESPONSE=$(
   curl -k -s -X 'POST' \
     "$PFADDR/api/v2/firewall/alias" \
     -H "X-API-Key: $PFTOKEN" \
     -H 'accept: application/json' \
     -H 'Content-Type: application/json' \
-    --data "{\"address\": [\"$IP_ADDR\"], \"apply\": true, \"name\": \"$ALIAS_NAME\", \"type\": \"host\"}" > /dev/null
-  msg_ok "Added host to pfSense firewall aliases"
+    --data "$ALIAS_DATA")
   
+  # Check if the response contains a success code
+  if echo "$ALIAS_RESPONSE" | grep -q '"code":200'; then
+    msg_ok "Added host to pfSense firewall aliases"
+  else
+    msg_error "Failed to add host to pfSense firewall aliases: $(echo "$ALIAS_RESPONSE" | grep -o '"message":"[^"]*"' || echo 'Unknown error')"
+  fi
   msg_ok "Infrastructure registration completed"
 }
 
