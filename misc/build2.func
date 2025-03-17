@@ -624,13 +624,38 @@ advanced_settings() {
   fi
 
   if [[ "${SSH}" == "yes" ]]; then
-    SSH_AUTHORIZED_KEY="$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "SSH Authorized key for root (leave empty for none)" 8 58 --title "SSH Key" 3>&1 1>&2 2>&3)"
-
-    if [[ -z "${SSH_AUTHORIZED_KEY}" ]]; then
-      echo "Warning: No SSH key provided."
+    # Ask user to choose between GitHub keys or manual entry
+    SSH_KEY_CHOICE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "SSH KEY SOURCE" --menu \
+      "Choose SSH key source:" 12 58 2 \
+      "github" "Get SSH keys from GitHub username" \
+      "manual" "Enter SSH key manually" \
+      3>&1 1>&2 2>&3)
+    
+    if [ $? -ne 0 ]; then
+      exit_script
+    fi
+    
+    if [ "$SSH_KEY_CHOICE" == "github" ]; then
+      # GitHub username will be used in setup_ssh_keys function
+      GITHUB_USERNAME=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Enter GitHub username to get SSH keys from" 8 58 --title "GITHUB USERNAME" 3>&1 1>&2 2>&3)
+      if [ $? -ne 0 ]; then
+        exit_script
+      fi
+      SSH_AUTHORIZED_KEY=""
+      SSH_KEY_SOURCE="github"
+      echo -e "${ROOTSSH}${BOLD}${DGN}SSH Key Source: ${BGN}GitHub ($GITHUB_USERNAME)${CL}"
+    else
+      # Manual SSH key entry
+      SSH_AUTHORIZED_KEY="$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "SSH Authorized key for root (leave empty for none)" 8 58 --title "SSH KEY" 3>&1 1>&2 2>&3)"
+      if [[ -z "${SSH_AUTHORIZED_KEY}" ]]; then
+        echo "Warning: No SSH key provided."
+      fi
+      SSH_KEY_SOURCE="manual"
+      echo -e "${ROOTSSH}${BOLD}${DGN}SSH Key Source: ${BGN}Manual Entry${CL}"
     fi
   else
     SSH_AUTHORIZED_KEY=""
+    SSH_KEY_SOURCE=""
   fi
   if (whiptail --backtitle "Proxmox VE Helper Scripts" --defaultno --title "VERBOSE MODE" --yesno "Enable Verbose Mode?" 10 58); then
     VERB="yes"

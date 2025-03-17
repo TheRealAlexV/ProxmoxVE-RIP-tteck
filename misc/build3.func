@@ -244,15 +244,16 @@ setup_ssh_keys() {
   # Enable root SSH login
   pct exec "$CTID" -- sed -i 's\#PermitRootLogin prohibit-password\PermitRootLogin without-password\g' /etc/ssh/sshd_config
   pct exec "$CTID" -- systemctl restart ssh
-  
-  # Prompt for GitHub username
-  if GITHUB_USER=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Enter GitHub username to add SSH keys (leave blank to skip)" 8 58 --title "SSH KEYS" 3>&1 1>&2 2>&3); then
-    if [ -n "$GITHUB_USER" ]; then
-      keycomment="github:${GITHUB_USER}"
+
+  # Check SSH key source
+  if [ "$SSH_KEY_SOURCE" == "github" ]; then
+    # Use GitHub username from advanced settings
+    if [ -n "$GITHUB_USERNAME" ]; then
+      keycomment="github:${GITHUB_USERNAME}"
       
       # Download keys from GitHub
       tmpfile=$(mktemp)
-      curl -s "https://github.com/${GITHUB_USER}.keys" > "$tmpfile"
+      curl -s "https://github.com/${GITHUB_USERNAME}.keys" > "$tmpfile"
       
       if [[ $(stat -c'%s' "$tmpfile") -gt 1 ]]; then
         # Add keys to root user
@@ -267,17 +268,26 @@ setup_ssh_keys() {
         pct exec "$CTID" -- bash -c "echo >> /root/.ssh/authorized_keys"
         pct exec "$CTID" -- chmod 600 /root/.ssh/authorized_keys
         
-        msg_ok "Added SSH keys from GitHub user: $GITHUB_USER"
+        msg_ok "Added SSH keys from GitHub user: $GITHUB_USERNAME"
       else
-        msg_error "Couldn't get any keys for GitHub user: $GITHUB_USER"
+        msg_error "Couldn't get any keys for GitHub user: $GITHUB_USERNAME"
       fi
       
       rm "$tmpfile"
     else
       msg_info "No GitHub username provided, skipping SSH key setup"
     fi
-  else
-    exit_script
+  elif [ "$SSH_KEY_SOURCE" == "manual" ]; then
+    # Use manually entered SSH key
+    if [ -n "$SSH_AUTHORIZED_KEY" ]; then
+      pct exec "$CTID" -- mkdir -p /root/.ssh
+      pct exec "$CTID" -- touch /root/.ssh/authorized_keys
+      echo "$SSH_AUTHORIZED_KEY" | pct exec "$CTID" -- tee -a /root/.ssh/authorized_keys > /dev/null
+      pct exec "$CTID" -- chmod 600 /root/.ssh/authorized_keys
+      msg_ok "Added manually entered SSH key"
+    else
+      msg_info "No SSH key provided, skipping SSH key setup"
+    fi
   fi
   
   msg_ok "SSH setup completed"
@@ -371,6 +381,7 @@ build_container() {
   export PASSWORD="$PW"
   export VERBOSE="$VERB"
   export SSH_ROOT="${SSH}"
+  export GITHUB_USERNAME
   export SSH_AUTHORIZED_KEY
   export CTID="$CT_ID"
   export CTTYPE="$CT_TYPE"
