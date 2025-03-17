@@ -382,6 +382,7 @@ build_container() {
   export VERBOSE="$VERB"
   export SSH_ROOT="${SSH}"
   export GITHUB_USERNAME
+  export SSH_KEY_SOURCE
   export SSH_AUTHORIZED_KEY
   export CTID="$CT_ID"
   export CTTYPE="$CT_TYPE"
