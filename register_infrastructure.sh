@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to manually register a Proxmox container in infrastructure systems
+# Script to manually register a Proxmox container or VM in infrastructure systems
 # Based on the register_infrastructure() function in build3.func
 
 # Color codes
@@ -63,23 +63,116 @@ parse_hostname() {
     echo "  Domain: ${DOMAIN1:-<none>}"
 }
 
-# Function to register the container in infrastructure systems
-register_infrastructure() {
+# Function to detect if ID is for a container or VM
+detect_resource_type() {
+    local ID=$1
+    
+    # Check if it's a container
+    if pct status $ID &>/dev/null; then
+        echo "container"
+        return 0
+    fi
+    
+    # Check if it's a VM
+    if qm status $ID &>/dev/null; then
+        echo "vm"
+        return 0
+    fi
+    
+    # Not found
+    echo "unknown"
+    return 1
+}
+
+# Function to get IP address from a container
+get_container_ip() {
     local CTID=$1
+    local IP=$(pct exec "$CTID" ip a s dev eth0 | awk '/inet / {print $2}' | cut -d/ -f1)
+    local CIDR=$(pct exec "$CTID" ip a s dev eth0 | awk '/inet / {print $2}' | grep -o '/[0-9]*')
+    echo "$IP$CIDR"
+}
+
+# Function to get IP address from a VM
+get_vm_ip() {
+    local VMID=$1
+    # Try to get IP from qm guest agent info
+    local IP=$(qm guest cmd $VMID network-get-interfaces | jq -r '.[] | select(.name | test("eth0|ens|eno|enp")) | .["ip-addresses"][] | select(."ip-address-type" == "ipv4") | ."ip-address"' 2>/dev/null)
     
-    msg_info "Registering infrastructure for container ID: $CTID"
+    if [ -z "$IP" ]; then
+        # Fallback to qm agent get-host-name-interfaces
+        IP=$(qm agent $VMID network-get-interfaces | jq -r '.[] | select(.name | test("eth0|ens|eno|enp")) | .["ip-addresses"][] | select(."ip-address-type" == "ipv4") | ."ip-address"' 2>/dev/null)
+    fi
     
-    # Check if container exists
-    if ! pct status $CTID &>/dev/null; then
-        msg_error "Container $CTID does not exist"
+    # Default CIDR if we can't determine it
+    echo "$IP/24"
+}
+
+# Function to register the resource in infrastructure systems
+register_infrastructure() {
+    local ID=$1
+    
+    # Detect if it's a container or VM
+    RESOURCE_TYPE=$(detect_resource_type $ID)
+    
+    if [ "$RESOURCE_TYPE" == "container" ]; then
+        msg_info "Registering infrastructure for container ID: $ID"
+        
+        # Check if container is running
+        if [ "$(pct status $ID | awk '{print $2}')" != "running" ]; then
+            msg_info "Container $ID is not running. Starting it now..."
+            pct start $ID
+            sleep 5  # Give it time to start
+        fi
+        
+        # Get container hostname
+        HOSTNAME=$(pct exec $ID hostname)
+        
+        # Get container IP address and network
+        NET=$(get_container_ip $ID)
+        
+        # Get network name from container config
+        NETNAME=$(pct config $ID | grep -oP 'net0:.*bridge=\K[^,]*' | sed -E 's/vmbr//g')
+    elif [ "$RESOURCE_TYPE" == "vm" ]; then
+        msg_info "Registering infrastructure for VM ID: $ID"
+        
+        # Check if VM is running
+        if [ "$(qm status $ID | awk '{print $2}')" != "running" ]; then
+            msg_info "VM $ID is not running. Starting it now..."
+            qm start $ID
+            sleep 15  # Give it more time to start and initialize guest agent
+        fi
+        
+        # Check if QEMU guest agent is running
+        if ! qm agent $ID ping &>/dev/null; then
+            msg_error "QEMU guest agent not responding in VM $ID. Please ensure it's installed and running."
+            msg_info "For Debian/Ubuntu: apt-get install qemu-guest-agent"
+            msg_info "For CentOS/RHEL: yum install qemu-guest-agent"
+            msg_info "Then enable and start the service: systemctl enable qemu-guest-agent && systemctl start qemu-guest-agent"
+            return 1
+        fi
+        
+        # Get VM hostname
+        HOSTNAME=$(qm agent $ID get-host-name | jq -r '.["host-name"]')
+        
+        # Get VM IP address and network
+        NET=$(get_vm_ip $ID)
+        
+        # Get network name from VM config
+        NETNAME=$(qm config $ID | grep -oP 'net0:.*bridge=\K[^,]*' | sed -E 's/vmbr//g')
+    else
+        msg_error "Resource with ID $ID not found or not supported"
         return 1
     fi
     
-    # Check if container is running
-    if [ "$(pct status $CTID | awk '{print $2}')" != "running" ]; then
-        msg_info "Container $CTID is not running. Starting it now..."
-        pct start $CTID
-        sleep 5  # Give it time to start
+    # Parse hostname
+    parse_hostname "$HOSTNAME"
+    
+    # Extract IP from NET
+    IP=$(echo $NET | cut -d/ -f1)
+    
+    if [ -z "$IP" ]; then
+        msg_error "Could not determine IP address"
+        return 1
     fi
     
     # Source configuration file
@@ -109,20 +202,6 @@ EOF
     # Check if API credentials are available
     if [ -z "$NBADDR" ] || [ -z "$NBTOKEN" ] || [ -z "$PFADDR" ] || [ -z "$PFTOKEN" ]; then
         msg_error "API credentials not found. Infrastructure registration skipped."
-        return 1
-    fi
-    
-    # Get container hostname
-    HOSTNAME=$(pct exec $CTID hostname)
-    parse_hostname "$HOSTNAME"
-    
-    # Get container IP address and network
-    IP=$(pct exec "$CTID" ip a s dev eth0 | awk '/inet / {print $2}' | cut -d/ -f1)
-    CIDR=$(pct exec "$CTID" ip a s dev eth0 | awk '/inet / {print $2}' | grep -o '/[0-9]*')
-    NET="$IP$CIDR"
-    
-    if [ -z "$IP" ]; then
-        msg_error "Could not determine container IP address"
         return 1
     fi
     
@@ -257,8 +336,6 @@ EOF
     # Extract IP without CIDR
     IP_ADDR=$(echo $NET | cut -d "/" -f1)
     
-    # Get network name from container config
-    NETNAME=$(pct config $CTID | grep -oP 'net0:.*bridge=\K[^,]*' | sed -E 's/vmbr//g')
     if [ -z "$NETNAME" ]; then
         NETNAME="default"
     fi
@@ -303,15 +380,15 @@ EOF
 
 # Main script execution
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 <container_id>"
-    echo "Example: $0 100"
+    echo "Usage: $0 <id>"
+    echo "Example: $0 100 (for container or VM with ID 100)"
     exit 1
 fi
 
 # Check if jq is installed
 if ! command -v jq &> /dev/null; then
     msg_error "jq is required but not installed. Please install it first."
-    echo "On Debian/Ubuntu: apt-get install jq"
+    echo "On Debian/Ubuntu: apt install jq"
     echo "On CentOS/RHEL: yum install jq"
     exit 1
 fi
@@ -322,5 +399,11 @@ if ! command -v pct &> /dev/null; then
     exit 1
 fi
 
-# Call the register_infrastructure function with the provided container ID
+# Check if qm command is available
+if ! command -v qm &> /dev/null; then
+    msg_error "qm command not found. This script must be run on a Proxmox host."
+    exit 1
+fi
+
+# Call the register_infrastructure function with the provided ID
 register_infrastructure "$1"
