@@ -212,16 +212,11 @@ if [ -n "$SHORTHOST" ] && [ -n "$DOMAIN1" ]; then
                 msg_info "Deleting DNS entry for $SHORTHOST.$DOMAIN1 (ID: $DNS_ID) from pfSense"
                 
                 # Delete the DNS entry
+                # Use the correct endpoint with id as a query parameter
                 DNS_DELETE=$(curl -k -s -X DELETE \
-                    "$PFADDR/api/v2/services/dns_resolver/host_override/$DNS_ID" \
+                    "$PFADDR/api/v2/services/dns_resolver/host_override?id=$DNS_ID&apply=true" \
                     -H "X-API-Key: $PFTOKEN" \
                     -H "accept: application/json")
-                
-                # Apply changes
-                curl -k -s -X POST \
-                    "$PFADDR/api/v2/services/dns_resolver/apply" \
-                    -H "X-API-Key: $PFTOKEN" \
-                    -H "accept: application/json" > /dev/null
                 
                 if echo "$DNS_DELETE" | grep -q '"code":200'; then
                     msg_ok "Successfully deleted DNS entry from pfSense"
@@ -260,8 +255,9 @@ if [ -n "$SHORTHOST" ]; then
                 msg_info "Deleting firewall alias $ALIAS_NAME from pfSense"
                 
                 # Delete the alias
+                # Use the correct endpoint with id as a query parameter
                 ALIAS_DELETE=$(curl -k -s -X DELETE \
-                    "$PFADDR/api/v2/firewall/alias/$ALIAS_NAME" \
+                    "$PFADDR/api/v2/firewall/alias?id=$ALIAS_NAME&apply=true" \
                     -H "X-API-Key: $PFTOKEN" \
                     -H "accept: application/json")
                 
@@ -272,14 +268,7 @@ if [ -n "$SHORTHOST" ]; then
                 fi
             done
             
-            # Apply changes
-            curl -k -s -X POST \
-                "$PFADDR/api/v2/firewall/apply" \
-                -H "X-API-Key: $PFTOKEN" \
-                -H "accept: application/json" \
-                --data '{"async": false}' > /dev/null
-            
-            msg_ok "Applied firewall changes"
+            msg_ok "All firewall aliases for $SHORTHOST deleted and changes applied"
         else
             msg_warn "No firewall aliases found for $SHORTHOST in pfSense"
         fi
