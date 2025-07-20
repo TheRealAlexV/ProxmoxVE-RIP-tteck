@@ -2,7 +2,7 @@
 
 # Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# License: MIT | https://github.com/TheRealAlexV/ProxmoxVE-RIP-tteck/raw/main/LICENSE
 # Source: https://daemonsync.me/
 
 source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
@@ -21,7 +21,7 @@ $STD apt-get install -y g++-multilib
 msg_ok "Installed Dependencies"
 
 msg_info "Installing Daemon Sync Server"
-wget -qL https://github.com/community-scripts/ProxmoxVE/raw/main/misc/daemonsync_2.2.0.0059_amd64.deb
+wget -qL https://github.com/TheRealAlexV/ProxmoxVE-RIP-tteck/raw/main/misc/daemonsync_2.2.0.0059_amd64.deb
 $STD dpkg -i daemonsync_2.2.0.0059_amd64.deb
 msg_ok "Installed Daemon Sync Server"
 

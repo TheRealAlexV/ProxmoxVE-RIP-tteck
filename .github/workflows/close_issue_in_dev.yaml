@@ -21,7 +21,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          issues=$(gh issue list --repo community-scripts/ProxmoxVED --json number,title --jq '.[] | {number, title}')
+          issues=$(gh issue list --repo TheRealAlexV/ProxmoxVE-RIP-tteckD --json number,title --jq '.[] | {number, title}')
           
           best_match_score=0
           best_match_number=0
@@ -54,5 +54,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT_MICHEL }}
         run: |
-          gh issue comment $issue_number --repo community-scripts/ProxmoxVED --body "Merged with #${{ github.event.pull_request.number }} in ProxmoxVE"
-          gh issue close $issue_number --repo community-scripts/ProxmoxVED
+          gh issue comment $issue_number --repo TheRealAlexV/ProxmoxVE-RIP-tteckD --body "Merged with #${{ github.event.pull_request.number }} in ProxmoxVE"
+          gh issue close $issue_number --repo TheRealAlexV/ProxmoxVE-RIP-tteckD

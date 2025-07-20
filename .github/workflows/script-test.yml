@@ -102,7 +102,7 @@ jobs:
                     continue
                   fi
               fi
-              git remote add community-scripts https://github.com/community-scripts/ProxmoxVE.git
+              git remote add community-scripts https://github.com/TheRealAlexV/ProxmoxVE-RIP-tteck.git
               git fetch community-scripts
               rm -f .github/workflows/scripts/app-test/pr-build.func || true
               rm -f .github/workflows/scripts/app-test/pr-install.func || true
@@ -117,7 +117,7 @@ jobs:
               chmod +x .github/workflows/scripts/app-test/pr-install.func
               chmod +x .github/workflows/scripts/app-test/pr-alpine-install.func
               chmod +x .github/workflows/scripts/app-test/pr-build.func
-              sed -i 's|source <(curl -s https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)|source .github/workflows/scripts/app-test/pr-build.func|g' "$RUNNING_FILE"
+              sed -i 's|source <(curl -s https://raw.githubusercontent.com/TheRealAlexV/ProxmoxVE-RIP-tteck/main/misc/build.func)|source .github/workflows/scripts/app-test/pr-build.func|g' "$RUNNING_FILE"
               echo "Executing $RUNNING_FILE"
               ERROR_MSG=$(./$RUNNING_FILE 2>&1 > /dev/null)
               echo "Finished running $FILE"

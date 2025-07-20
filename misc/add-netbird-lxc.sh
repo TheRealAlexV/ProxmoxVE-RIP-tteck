@@ -4,7 +4,7 @@
 # Author: tteck (tteckster)
 # Co-Author: MickLesk (Canbiz)
 # License: MIT
-# https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# https://github.com/TheRealAlexV/ProxmoxVE-RIP-tteck/raw/main/LICENSE
 
 function header_info {
 clear

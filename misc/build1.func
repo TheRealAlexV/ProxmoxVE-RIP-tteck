@@ -2,7 +2,7 @@
 # Author: tteck (tteckster)
 # Co-Author: MickLesk
 # Co-Author: michelroegl-brunner
-# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# License: MIT | https://github.com/TheRealAlexV/ProxmoxVE-RIP-tteck/raw/main/LICENSE
 
 # Function to source the config file for API credentials
 source_config() {
@@ -41,7 +41,7 @@ variables() {
   SHORTHOST=""
 }
 
-source <(curl -s https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/api.func)
+source <(curl -s https://raw.githubusercontent.com/TheRealAlexV/ProxmoxVE-RIP-tteck/main/misc/api.func)
 
 # This function sets various color variables using ANSI escape codes for formatting text in the terminal.
 color() {
@@ -96,7 +96,7 @@ catch_errors() {
 
 # This function is called when an error occurs. It receives the exit code, line number, and command that caused the error, and displays an error message.
 error_handler() {
-  source /dev/stdin <<<$(wget -qLO - https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/api.func)
+  source /dev/stdin <<<$(wget -qLO - https://raw.githubusercontent.com/TheRealAlexV/ProxmoxVE-RIP-tteck/main/misc/api.func)
   if [ -n "$SPINNER_PID" ] && ps -p $SPINNER_PID >/dev/null; then kill $SPINNER_PID >/dev/null; fi
   printf "\e[?25h"
   local exit_code="$?"
@@ -301,7 +301,7 @@ update_motd_ip() {
 # Function to download & save header files
 get_header() {
   local app_name=$(echo ${APP,,} | tr -d ' ')
-  local header_url="https://github.com/community-scripts/ProxmoxVE/raw/main/ct/headers/${app_name}"
+  local header_url="https://github.com/TheRealAlexV/ProxmoxVE-RIP-tteck/raw/main/ct/headers/${app_name}"
   local local_header_path="/usr/local/community-scripts/headers/${app_name}"
 
   mkdir -p "/usr/local/community-scripts/headers"
