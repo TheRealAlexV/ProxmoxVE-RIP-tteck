@@ -69,11 +69,12 @@ advanced_settings() {
     var_version=""
     while [ -z "$var_version" ]; do
       if [ "$var_default_version" == "20.04" ]; then
-        if var_version=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "UBUNTU VERSION" --radiolist "Choose Version" 10 58 4 \
+        if var_version=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "UBUNTU VERSION" --radiolist "Choose Version" 10 58 5 \
           "20.04" "Focal" ON \
           "22.04" "Jammy" OFF \
           "24.04" "Noble" OFF \
-          "24.10" "Oracular" OFF \
+          "25.04" "Plucky" OFF \
+          "25.10" "Interim" OFF \
           3>&1 1>&2 2>&3); then
           if [ -n "$var_version" ]; then
             echo -e "${OSVERSION}${BOLD}${DGN}Version: ${BGN}$var_version${CL}"
@@ -82,11 +83,12 @@ advanced_settings() {
           exit_script
         fi
       elif [ "$var_default_version" == "22.04" ]; then
-        if var_version=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "UBUNTU VERSION" --radiolist "Choose Version" 10 58 4 \
+        if var_version=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "UBUNTU VERSION" --radiolist "Choose Version" 10 58 5 \
           "20.04" "Focal" OFF \
           "22.04" "Jammy" ON \
           "24.04" "Noble" OFF \
-          "24.10" "Oracular" OFF \
+          "25.04" "Plucky" OFF \
+          "25.10" "Interim" OFF \
           3>&1 1>&2 2>&3); then
           if [ -n "$var_version" ]; then
             echo -e "${OSVERSION}${BOLD}${DGN}Version: ${BGN}$var_version${CL}"
@@ -95,11 +97,26 @@ advanced_settings() {
           exit_script
         fi
       elif [ "$var_default_version" == "24.04" ]; then
-        if var_version=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "UBUNTU VERSION" --radiolist "Choose Version" 10 58 4 \
+        if var_version=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "UBUNTU VERSION" --radiolist "Choose Version" 10 58 5 \
           "20.04" "Focal" OFF \
           "22.04" "Jammy" OFF \
           "24.04" "Noble" ON \
-          "24.10" "Oracular" OFF \
+          "25.04" "Plucky" OFF \
+          "25.10" "Interim" OFF \
+          3>&1 1>&2 2>&3); then
+          if [ -n "$var_version" ]; then
+            echo -e "${OSVERSION}${BOLD}${DGN}Version: ${BGN}$var_version${CL}"
+          fi
+        else
+          exit_script
+        fi
+      elif [ "$var_default_version" == "25.04" ]; then
+        if var_version=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "UBUNTU VERSION" --radiolist "Choose Version" 10 58 5 \
+          "20.04" "Focal" OFF \
+          "22.04" "Jammy" OFF \
+          "24.04" "Noble" OFF \
+          "25.04" "Plucky" ON \
+          "25.10" "Interim" OFF \
           3>&1 1>&2 2>&3); then
           if [ -n "$var_version" ]; then
             echo -e "${OSVERSION}${BOLD}${DGN}Version: ${BGN}$var_version${CL}"
@@ -108,11 +125,12 @@ advanced_settings() {
           exit_script
         fi
       else
-        if var_version=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "UBUNTU VERSION" --radiolist "Choose Version" 10 58 4 \
+        if var_version=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "UBUNTU VERSION" --radiolist "Choose Version" 10 58 5 \
           "20.04" "Focal" OFF \
           "22.04" "Jammy" OFF \
           "24.04" "Noble" OFF \
-          "24.10" "Oracular" ON \
+          "25.04" "Plucky" OFF \
+          "25.10" "Interim" ON \
           3>&1 1>&2 2>&3); then
           if [ -n "$var_version" ]; then
             echo -e "${OSVERSION}${BOLD}${DGN}Version: ${BGN}$var_version${CL}"
